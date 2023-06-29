@@ -1,0 +1,6 @@
+
+<launch> 
+    <include file="$(find azure_kinect_ros_driver)/launch/kinect_rgbd.launch" />
+
+    <node name="kinfu2_node" pkg="kinfu2" type="kinfu2_node" output="screen"/>
+</launch>
