@@ -25,9 +25,10 @@ class Preproc:
                  segformer_trt_file: str,
                  segformer_taxonomy: str,
                  fastsam_pt_file: Optional[str] = None,
-                 refinement_enabled: bool = False,
-                 blur_filter_enabled: bool = True,
-                 resolution: tuple = (1280, 720)
+                 refinement_enabled: Optional[bool] = False,
+                 blur_filter_enabled: Optional[bool] = False,
+                 blur_threshold: Optional[int] = 20,
+                 resolution: Optional[tuple] = (1280, 720)
                  ) -> None:
         self.bridge = CvBridge()
         self.resolution = resolution
@@ -47,6 +48,9 @@ class Preproc:
 
         self.seg_pub = rospy.Publisher('/preproc/segmentation', Image, queue_size=10)
         self.depth_pub = rospy.Publisher('/preproc/depth', Image, queue_size=10)
+
+        self.blur_filter_enabled = blur_filter_enabled
+        self.blur_threshold = blur_threshold
 
     def refine_seg(self, img, seg):
         sam_out = self.fastsam_model(img, device=self.device, retina_masks=False, iou=0.7, conf=0.5, imgsz=1024,
@@ -82,6 +86,13 @@ class Preproc:
         except CvBridgeError as e:
             print(e)
 
+        if self.blur_filter_enabled:
+            laplacian_var = cv2.Laplacian(cv_rgb, cv2.CV_64F).var()
+            print("laplacian_var:", laplacian_var)
+            if laplacian_var < self.blur_threshold:
+                print("too much motion blur, skip current frame")
+                return
+
         sf_in = self.segformer_trt.preprocess_input(cv_rgb)
         sf_out = self.segformer_trt.inference(sf_in)
         seg = self.segformer_trt.postprocess_output(sf_out, (1024, 576))
@@ -90,8 +101,6 @@ class Preproc:
             seg = self.refine_seg(cv_rgb, seg)
         else:
             seg = cv2.resize(seg, self.resolution, interpolation=cv2.INTER_NEAREST)
-
-        # cv_image = self.segformer_trt.visualize_output(cv_rgb, np.squeeze(cls)
 
         seg_msg = self.bridge.cv2_to_imgmsg(cv2.convertScaleAbs(seg), "8UC1")
         self.seg_pub.publish(seg_msg)
@@ -108,7 +117,8 @@ def main():
         '~segformer_taxonomy': rospkg_path + '/resources/taxonomy.json',
         '~refinement_enabled': True,
         '~fastsam_pt_file': rospkg_path + '/resources/FastSAM-s.pt',
-        '~blur_filter_enabled': True
+        '~blur_filter_enabled': True,
+        '~blur_threshold': 20
     }
     params = {param.strip('~'): rospy.get_param(param, default) for param, default in default_params.items()}
 
