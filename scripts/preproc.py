@@ -93,7 +93,7 @@ class Preproc:
 
         # cv_image = self.segformer_trt.visualize_output(cv_rgb, np.squeeze(cls)
 
-        seg_msg = self.bridge.cv2_to_imgmsg(seg, "32SC1")
+        seg_msg = self.bridge.cv2_to_imgmsg(cv2.convertScaleAbs(seg), "8UC1")
         self.seg_pub.publish(seg_msg)
         self.depth_pub.publish(depth)
 
